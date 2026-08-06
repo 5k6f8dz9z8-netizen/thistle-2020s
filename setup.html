@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Setup — Coach Availability</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=Barlow:wght@400&display=swap" rel="stylesheet" />
+<style>
+  :root { --ink:#101012; --ink2:#4A4A50; --ink3:#8A8A92; --line:#DEDEE1; --red:#DE1E2D;
+          --green:#1E8A4B; --disp:'Barlow Condensed',Arial Narrow,sans-serif; --body:'Barlow',system-ui,sans-serif; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#F1F1F2; color:var(--ink); font-family:var(--body); padding:0 0 60px; }
+  header { background:var(--ink); color:#fff; border-bottom:3px solid var(--red); padding:18px 0; }
+  .wrap { max-width:660px; margin:0 auto; padding:0 16px; }
+  h1 { font-family:var(--disp); font-weight:700; letter-spacing:.1em; text-transform:uppercase;
+       font-size:26px; margin:0; line-height:1; }
+  header p { margin:6px 0 0; color:#B4B4BC; font-size:14px; }
+  .step { background:#fff; border:1px solid var(--line); border-left:5px solid var(--ink);
+          border-radius:3px; padding:16px 18px; margin-top:16px; }
+  .step[data-done="true"] { border-left-color:var(--green); }
+  h2 { font-family:var(--disp); font-size:19px; letter-spacing:.14em; text-transform:uppercase; margin:0 0 6px; }
+  h2 span { color:var(--red); }
+  p, li { font-size:14.5px; color:var(--ink2); line-height:1.55; }
+  p { margin:0 0 10px; }
+  ol { margin:0 0 4px; padding-left:20px; }
+  label { display:block; font-family:var(--disp); font-size:12px; letter-spacing:.18em;
+          text-transform:uppercase; color:var(--ink3); margin:14px 0 5px; }
+  input, textarea { width:100%; padding:10px 11px; border:1.5px solid var(--line); border-radius:3px;
+          font-family:var(--body); font-size:15px; color:var(--ink); background:#fff; }
+  textarea { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; min-height:150px; resize:vertical; }
+  input:focus, textarea:focus { outline:2px solid var(--red); outline-offset:1px; border-color:var(--red); }
+  .row { display:flex; gap:10px; flex-wrap:wrap; }
+  .row > * { flex:1 1 180px; min-width:0; }
+  button { font-family:var(--disp); font-size:15px; font-weight:700; letter-spacing:.14em;
+           text-transform:uppercase; border:0; border-radius:3px; padding:11px 18px; cursor:pointer; }
+  .primary { background:var(--red); color:#fff; }
+  .primary:hover { background:#A81422; }
+  .primary:disabled { background:#C4C4CA; cursor:not-allowed; }
+  .ghost { background:#fff; color:var(--ink2); border:1.5px solid var(--line); }
+  .ghost:hover { border-color:var(--ink); color:var(--ink); }
+  .actions { display:flex; gap:8px; margin-top:16px; flex-wrap:wrap; }
+  pre { background:#101012; color:#EDEDEF; padding:13px 14px; border-radius:3px; overflow-x:auto;
+        font-size:12.5px; line-height:1.5; margin:10px 0 0; }
+  .status { font-size:13.5px; margin-top:12px; padding:9px 12px; border-radius:3px; }
+  .ok { background:#EAF6EF; border:1px solid #B7DEC7; color:#146137; }
+  .bad { background:#FDEEEF; border:1px solid #F6BFC4; color:#A81422; }
+  .field-note { font-size:12.5px; color:var(--ink3); margin-top:6px; }
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <h1>Coach Availability — Setup</h1>
+  <p>Fill this in once and it writes your config.js for you.</p>
+</div></header>
+
+<div class="wrap">
+
+  <div class="step">
+    <h2>1 <span>·</span> Your squad</h2>
+    <label for="club">Club name</label>
+    <input id="club" value="Larkhall Thistle" />
+    <div class="row">
+      <div>
+        <label for="squad">Squad</label>
+        <input id="squad" value="2020s" />
+      </div>
+      <div>
+        <label for="covered">Coaches needed to count as covered</label>
+        <input id="covered" type="number" min="1" max="10" value="2" />
+      </div>
+    </div>
+    <label for="roster">Coaches, separated by commas</label>
+    <input id="roster" value="Chris, Arron, Steven, Greg, Davie, Jenna" />
+    <div class="field-note">These are the only names that can sign in.</div>
+  </div>
+
+  <div class="step">
+    <h2>2 <span>·</span> Firebase</h2>
+    <ol>
+      <li>Create a project at <strong>console.firebase.google.com</strong> (skip Analytics).</li>
+      <li><strong>Build → Realtime Database → Create database</strong>, location europe-west1, start in test mode.</li>
+      <li><strong>Project settings → Your apps → Web (&lt;/&gt;)</strong>, register an app, and copy the whole <code>firebaseConfig</code> block it shows you.</li>
+    </ol>
+    <label for="paste">Paste the firebaseConfig block here</label>
+    <textarea id="paste" spellcheck="false" placeholder="const firebaseConfig = {&#10;  apiKey: &quot;AIza...&quot;,&#10;  authDomain: &quot;thistle-2020s.firebaseapp.com&quot;,&#10;  databaseURL: &quot;https://thistle-2020s-default-rtdb.europe-west1.firebasedatabase.app&quot;,&#10;  projectId: &quot;thistle-2020s&quot;,&#10;  appId: &quot;1:123...&quot;&#10;};"></textarea>
+    <div class="field-note">Leave this empty to build a device-only version you can try first.</div>
+    <div id="parse"></div>
+  </div>
+
+  <div class="step">
+    <h2>3 <span>·</span> Database rules</h2>
+    <p>In the Realtime Database <strong>Rules</strong> tab, replace everything with this and press Publish. Test mode expires after 30 days, so this step isn't optional.</p>
+    <pre id="rules">{
+  "rules": {
+    "squads": {
+      "$squad": { ".read": true, ".write": true }
+    }
+  }
+}</pre>
+    <div class="actions"><button class="ghost" id="copyRules">Copy rules</button></div>
+  </div>
+
+  <div class="step">
+    <h2>4 <span>·</span> Get your file</h2>
+    <p>Download <code>config.js</code> and upload it to your repo, replacing the one that's there. That's the whole job — nothing else needs editing.</p>
+    <div class="actions">
+      <button class="primary" id="download">Download config.js</button>
+      <button class="ghost" id="copyConfig">Copy instead</button>
+    </div>
+    <div id="status"></div>
+    <pre id="preview"></pre>
+  </div>
+
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const KEYS = ["apiKey","authDomain","databaseURL","projectId","storageBucket","messagingSenderId","appId"];
+
+// Lenient on purpose — copes with the JS snippet, bare braces, or JSON.
+function parseConfig(text) {
+  const out = {};
+  const re = /["']?([A-Za-z]+)["']?\s*:\s*["'`]([^"'`]+)["'`]/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    if (KEYS.includes(m[1])) out[m[1]] = m[2].trim();
+  }
+  return out;
+}
+
+const currentConfig = () => parseConfig($("paste").value);
+const quote = (s) => '"' + String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+
+function buildFile() {
+  const club = $("club").value.trim() || "Larkhall Thistle";
+  const squad = $("squad").value.trim() || "2020s";
+  const covered = Math.max(1, Math.min(10, Number($("covered").value) || 2));
+  const roster = $("roster").value.split(",").map((s) => s.trim()).filter(Boolean);
+  const cfg = currentConfig();
+  const slug = squad.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-|-$/g, "") || "squad";
+
+  const found = KEYS.filter((k) => cfg[k]);
+  const fb = found.length
+    ? "{\n" + found.map((k) => "  " + k + ": " + quote(cfg[k]) + ",").join("\n") + "\n}"
+    : "{\n  // No Firebase details yet — the app will save on each device only.\n}";
+
+  return [
+    "// Generated by setup.html — the only file you need to edit.",
+    "",
+    "// Who can sign in. Capitals don't matter when a coach types their name.",
+    "export const ROSTER = [" + roster.map(quote).join(", ") + "];",
+    "",
+    "// How many yes answers count as covered (green on the calendar).",
+    "export const COVERED_AT = " + covered + ";",
+    "",
+    "// Wording in the masthead and on the sign-in screen.",
+    "export const CLUB = " + quote(club) + ";",
+    "export const SQUAD = " + quote(squad) + ";",
+    "",
+    "// Firebase web app config.",
+    "export const FIREBASE = " + fb + ";",
+    "",
+    "// Where this squad's data lives in the database.",
+    "export const DB_PATH = " + quote("squads/" + slug) + ";",
+    "",
+  ].join("\n");
+}
+
+function refresh() {
+  const cfg = currentConfig();
+  const found = KEYS.filter((k) => cfg[k]);
+  const pasted = $("paste").value.trim().length > 0;
+  const step = $("paste").closest(".step");
+
+  let msg;
+  if (!pasted) {
+    msg = '<div class="status bad">No Firebase details yet — the app will work, but each coach will only see their own answers.</div>';
+    step.dataset.done = "false";
+  } else if (!cfg.databaseURL) {
+    msg = '<div class="status bad">Found ' + found.length + ' values but no databaseURL. Open Realtime Database in Firebase and copy the URL shown at the top — without it nothing is shared.</div>';
+    step.dataset.done = "false";
+  } else {
+    msg = '<div class="status ok">Looks right — found ' + found.join(", ") + '.</div>';
+    step.dataset.done = "true";
+  }
+  $("parse").innerHTML = msg;
+  $("preview").textContent = buildFile();
+}
+
+["club","squad","covered","roster","paste"].forEach((id) => $(id).addEventListener("input", refresh));
+
+$("download").addEventListener("click", () => {
+  const blob = new Blob([buildFile()], { type: "text/javascript" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "config.js";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+  $("status").innerHTML = '<div class="status ok">Downloaded. Upload it to your repo, replacing the config.js that is there.</div>';
+});
+
+async function copy(text, where) {
+  try {
+    await navigator.clipboard.writeText(text);
+    $(where).innerHTML = '<div class="status ok">Copied.</div>';
+  } catch (e) {
+    $(where).innerHTML = '<div class="status bad">Could not copy automatically — select the text below and copy it by hand.</div>';
+  }
+}
+
+$("copyConfig").addEventListener("click", () => copy(buildFile(), "status"));
+$("copyRules").addEventListener("click", () => copy($("rules").textContent, "status"));
+
+refresh();
+</script>
+</body>
+</html>
