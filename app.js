@@ -31,6 +31,121 @@ const answerOf = (a) => (typeof a === "string" ? a : a && a.v) || null;
 const noteOf = (a) => (a && typeof a === "object" && a.note) || "";
 
 const today = iso(new Date());
+const thisMonth = today.slice(0, 7);
+
+/* ------------------------------------------------------- coach info table */
+
+// Grouped so the table has sensible headers and the edit card reads in order.
+const INFO_GROUPS = [
+  { label: "Registration", fields: [
+    { key: "cometId", head: "Comet ID", type: "text" },
+  ]},
+  { label: "Role", fields: [
+    { key: "headCoach", head: "Head Coach", type: "tick" },
+    { key: "coach", head: "Coach", type: "tick" },
+    { key: "firstAider", head: "First Aider", type: "tick" },
+    { key: "secretary", head: "Secretary", type: "tick" },
+  ]},
+  { label: "Conduct & training", fields: [
+    { key: "conduct", head: "Conduct Signed", type: "date" },
+    { key: "wellbeing", head: "Wellbeing Exp", type: "month" },
+    { key: "mental", head: "Mental Exp", type: "month" },
+    { key: "selfDec", head: "Self Dec Exp", type: "month" },
+  ]},
+  { label: "Qualifications", fields: [
+    { key: "q11", head: "1.1", type: "tick" },
+    { key: "q12c", head: "1.2 Children", type: "tick" },
+    { key: "q13c", head: "1.3 Children", type: "tick" },
+    { key: "q12y", head: "1.2 Youth", type: "tick" },
+    { key: "q13y", head: "1.3 Youth", type: "tick" },
+    { key: "otherBadges", head: "Other Badges", type: "tick" },
+    { key: "badgeExpiry", head: "Badge Expiry", type: "month" },
+  ]},
+  { label: "First aid & PVG", fields: [
+    { key: "firstAidExp", head: "First Aid Exp", type: "month" },
+    { key: "pvgType", head: "PVG Type", type: "choice", options: ["", "Adult", "Child"] },
+    { key: "pvg", head: "PVG", type: "month" },
+  ]},
+];
+
+const INFO_FIELDS = INFO_GROUPS.flatMap((g) => g.fields);
+const fieldOf = (key) => INFO_FIELDS.find((f) => f.key === key);
+const EXPIRY_KEYS = INFO_FIELDS.filter((f) => f.type === "month").map((f) => f.key);
+
+// Starting values from the club sheet, written once if the table is still
+// empty. Contact details are deliberately left out — see README. Once every
+// coach has filled their row in, this block can be deleted.
+const SEED = {
+  greg:   { fullName: "Greg Gilfillan", cometId: "1393250", firstAider: true, conduct: "2026-03-08",
+            wellbeing: "2028-12", mental: "2028-12", selfDec: "2026-12", q11: true,
+            badgeExpiry: "2029-12", firstAidExp: "2029-05", pvgType: "Adult", pvg: "2029-01" },
+  chris:  { fullName: "Christopher Smith", cometId: "1402665", coach: true, conduct: "2026-03-08",
+            wellbeing: "2029-02", mental: "2029-02", selfDec: "2027-03", q11: true,
+            badgeExpiry: "2029-12", pvgType: "Child", pvg: "2029-02" },
+  jenna:  { fullName: "Jenna Kirk", cometId: "1400662", secretary: true, conduct: "2026-03-08",
+            wellbeing: "2029-01", mental: "2029-01", selfDec: "2027-02",
+            firstAidExp: "2029-05", pvgType: "Adult", pvg: "2029-02" },
+  steven: { fullName: "Stephen Pollock", cometId: "1400665", coach: true, conduct: "2026-03-08",
+            wellbeing: "2029-01", mental: "2029-01", selfDec: "2027-02", q11: true,
+            badgeExpiry: "2029-12", firstAidExp: "2029-05", pvgType: "Adult", pvg: "2029-02" },
+  arron:  { fullName: "Arran Gardiner", cometId: "982635", headCoach: true, firstAider: true,
+            conduct: "2026-03-13", wellbeing: "2029-03", mental: "2029-05", selfDec: "2026-11",
+            q11: true, q12c: true, badgeExpiry: "2029-12", firstAidExp: "2026-10",
+            pvgType: "Adult", pvg: "2028-11" },
+  davie:  { fullName: "David Ralston", cometId: "1256174", coach: true,
+            wellbeing: "2028-02", mental: "2027-02", selfDec: "2027-06",
+            pvgType: "Adult", pvg: "2029-06" },
+};
+
+// Rows already saved under the old column names get remapped once, so nobody
+// has to retype anything. Firebase rejects undefined, hence delete.
+const INFO_VERSION = 2;
+
+function migrateInfo(d) {
+  if (Number(d.infoVersion || 1) >= INFO_VERSION) return null;
+  const info = {};
+  for (const [id, raw] of Object.entries(d.info || {})) {
+    const row = { ...raw };
+    if (row.manager) row.headCoach = true;   // Manager became Head Coach
+    delete row.manager;
+    delete row.coach;                        // the old separate Coach column is gone
+    if (row.helper) row.coach = true;        // Team Helper became Coach
+    delete row.helper;
+    if (!row.cometId && SEED[id]?.cometId) row.cometId = SEED[id].cometId;
+    delete row.email; delete row.dob; delete row.phone;
+    info[id] = row;
+  }
+  if (info.jenna) {
+    info.jenna = { ...info.jenna, secretary: true };
+    delete info.jenna.headCoach; delete info.jenna.coach; delete info.jenna.firstAider;
+  }
+  return { ...d, info, infoVersion: INFO_VERSION };
+}
+
+const monthLabel = (v) => {
+  if (!v) return "";
+  const [y, m] = String(v).split("-").map(Number);
+  if (!y || !m) return "";
+  return `${SHORT_MONTHS[m - 1]} ${String(y).slice(-2)}`;
+};
+
+const dateLabel = (v) => {
+  if (!v) return "";
+  const d = fromIso(v);
+  if (isNaN(d)) return "";
+  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`;
+};
+
+// How close an expiry is, used for the colour and the summary counts.
+function expiryState(v) {
+  if (!v) return "missing";
+  if (v < thisMonth) return "expired";
+  const [y, m] = v.split("-").map(Number);
+  const months = (y - Number(thisMonth.slice(0, 4))) * 12 + (m - Number(thisMonth.slice(5, 7)));
+  return months <= 3 ? "soon" : "ok";
+}
+
+const infoFor = (id) => state.data.info?.[id] || {};
 
 /* ---------------------------------------------------------------- storage */
 
@@ -91,7 +206,8 @@ const store = {
 function normalise(raw) {
   const d = raw && typeof raw === "object" ? raw : {};
   const sessions = Array.isArray(d.sessions) ? d.sessions : Object.values(d.sessions || {});
-  return { sessions: sessions.filter(Boolean), responses: d.responses || {} };
+  return { sessions: sessions.filter(Boolean), responses: d.responses || {}, info: d.info || {},
+           infoVersion: d.infoVersion || 1 };
 }
 
 /* ------------------------------------------------------------------ state */
@@ -110,6 +226,8 @@ const state = {
   editingId: null,
   confirmingId: null,
   form: null,
+  infoEditing: null,
+  infoForm: null,
 };
 
 const app = document.getElementById("app");
@@ -175,8 +293,9 @@ function mainHtml() {
     <div class="tabs">
       <button class="tab" data-act="view" data-view="calendar" data-on="${state.view === "calendar"}">Calendar</button>
       <button class="tab" data-act="view" data-view="list" data-on="${state.view === "list"}">Upcoming</button>
+      <button class="tab" data-act="view" data-view="info" data-on="${state.view === "info"}">Coach Info</button>
     </div>
-    ${state.view === "calendar" ? calendarHtml() + dayPanelHtml() : listHtml()}
+    ${state.view === "calendar" ? calendarHtml() + dayPanelHtml() : state.view === "list" ? listHtml() : infoHtml()}
     <p class="note">
       ${store.mode === "cloud" ? "Shared with every coach on the list. Answers save the moment you tap them." : "Saving on this device only — add your Firebase details to share with the squad."}
       <br /><button class="linkish" data-act="reload">Reload</button>
@@ -248,6 +367,136 @@ function listHtml() {
     </div>
     ${upcoming.map((s) => cardHtml(s, true)).join("")}
     ${upcoming.length === 0 ? `<div class="empty">Nothing in the diary yet. Add your next training session or game.</div>` : ""}
+  </div>`;
+}
+
+/* ------------------------------------------------------- coach info view */
+
+function cellHtml(f, info) {
+  const v = info[f.key];
+  if (f.type === "tick") {
+    return v
+      ? `<td class="c-tick" data-yes="true"><span>✓</span></td>`
+      : `<td class="c-tick"><span>–</span></td>`;
+  }
+  if (f.type === "month") {
+    const st = expiryState(v);
+    return `<td class="c-exp" data-exp="${st}">${v ? esc(monthLabel(v)) : "—"}</td>`;
+  }
+  if (f.type === "date") return `<td>${v ? esc(dateLabel(v)) : "—"}</td>`;
+  if (f.type === "email") return v ? `<td><a href="mailto:${esc(v)}">${esc(v)}</a></td>` : `<td>—</td>`;
+  if (f.type === "tel") return v ? `<td><a href="tel:${esc(String(v).replace(/\s+/g, ""))}">${esc(v)}</a></td>` : `<td>—</td>`;
+  return `<td>${v ? esc(v) : "—"}</td>`;
+}
+
+function infoHtml() {
+  if (state.infoEditing) return infoFormHtml();
+
+  // One count per problem so the strip tells you what actually needs chasing.
+  let expired = 0, soon = 0, missing = 0;
+  for (const c of COACHES) {
+    const info = infoFor(c.id);
+    for (const k of EXPIRY_KEYS) {
+      const st = expiryState(info[k]);
+      if (st === "expired") expired++;
+      else if (st === "soon") soon++;
+      else if (st === "missing") missing++;
+    }
+  }
+
+  const head = INFO_GROUPS.map((g) =>
+    `<th class="grp" colspan="${g.fields.length}">${esc(g.label)}</th>`).join("");
+  const sub = INFO_GROUPS.flatMap((g) => g.fields)
+    .map((f) => `<th>${esc(f.head)}</th>`).join("");
+
+  const rows = COACHES.map((c) => {
+    const info = infoFor(c.id);
+    const worst = EXPIRY_KEYS.map((k) => expiryState(info[k]));
+    const flag = worst.includes("expired") ? "expired" : worst.includes("soon") ? "soon" : "ok";
+    return `<tr>
+      <th class="stick" data-flag="${flag}">
+        <button class="rowname" data-act="info-edit" data-id="${c.id}">
+          <span class="chip">${esc(c.initial)}</span>
+          <span class="rn">${esc(info.fullName || c.name)}</span>
+          <span class="pencil">Edit</span>
+        </button>
+      </th>
+      ${INFO_FIELDS.map((f) => cellHtml(f, info)).join("")}
+    </tr>`;
+  }).join("");
+
+  return `
+  <div class="panel">
+    <div class="panelhead">
+      <div class="daytitle">Coach Info</div>
+    </div>
+
+    <div class="statstrip">
+      <div class="stat" data-tone="${expired ? "bad" : "good"}"><b>${expired}</b><span>Expired</span></div>
+      <div class="stat" data-tone="${soon ? "warn" : "good"}"><b>${soon}</b><span>Due in 3 months</span></div>
+      <div class="stat"><b>${missing}</b><span>Not recorded</span></div>
+    </div>
+
+    <div class="scrollnote">Swipe the table sideways · tap a name to edit that row</div>
+
+    <div class="tablewrap">
+      <table class="ctable">
+        <thead>
+          <tr><th class="stick grp">Coach</th>${head}</tr>
+          <tr><th class="stick sub">Name</th>${sub}</tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+
+    <div class="legend">
+      <span><i style="background:var(--green)"></i>more than 3 months left</span>
+      <span><i style="background:var(--amber)"></i>within 3 months</span>
+      <span><i style="background:var(--red)"></i>expired or not recorded</span>
+    </div>
+  </div>`;
+}
+
+function infoFormHtml() {
+  const c = coachById(state.infoEditing);
+  const f = state.infoForm || {};
+  return `
+  <div class="panel">
+    <div class="panelhead">
+      <div class="daytitle">${esc(f.fullName || c.name)}</div>
+      <button class="add" data-act="info-cancel">Back</button>
+    </div>
+    <div class="form">
+      <label for="i-fullName">Full name</label>
+      <input id="i-fullName" data-info="fullName" value="${esc(f.fullName || c.name)}" />
+
+      ${INFO_GROUPS.map((g) => `
+        <div class="grouphead">${esc(g.label)}</div>
+        ${g.fields.map((fd) => {
+          const v = f[fd.key] ?? "";
+          if (fd.type === "tick") return `
+            <label class="check" style="margin:10px 0 0">
+              <input type="checkbox" data-info="${fd.key}" ${f[fd.key] ? "checked" : ""} />
+              <span>${esc(fd.head)}</span>
+            </label>`;
+          if (fd.type === "choice") return `
+            <label for="i-${fd.key}">${esc(fd.head)}</label>
+            <select id="i-${fd.key}" data-info="${fd.key}">
+              ${fd.options.map((o) => `<option value="${esc(o)}"${o === v ? " selected" : ""}>${o ? esc(o) : "—"}</option>`).join("")}
+            </select>`;
+          const type = fd.type === "month" ? "month" : fd.type === "date" ? "date"
+            : fd.type === "email" ? "email" : fd.type === "tel" ? "tel" : "text";
+          return `
+            <label for="i-${fd.key}">${esc(fd.head)}</label>
+            <input id="i-${fd.key}" type="${type}" data-info="${fd.key}" value="${esc(v)}" />`;
+        }).join("")}
+      `).join("")}
+
+      <div class="actions">
+        <button class="primary" data-act="info-save">Save</button>
+        <button class="ghost" data-act="info-cancel">Cancel</button>
+      </div>
+    </div>
   </div>`;
 }
 
@@ -508,6 +757,13 @@ app.addEventListener("click", (e) => {
     return render();
   }
   if (act === "answer") return setAnswer(id, v);
+  if (act === "info-edit") {
+    state.infoEditing = id;
+    state.infoForm = { fullName: coachById(id).name, ...infoFor(id) };
+    return render();
+  }
+  if (act === "info-cancel") { state.infoEditing = null; state.infoForm = null; return render(); }
+  if (act === "info-save") return saveInfo();
   if (act === "add-open") {
     state.view = "calendar"; state.editingId = null; state.confirmingId = null;
     state.adding = true; state.form = blankForm(state.selected);
@@ -530,6 +786,11 @@ app.addEventListener("click", (e) => {
 app.addEventListener("input", (e) => {
   const el = e.target;
   if (el.id === "name") { state.entry = el.value; state.gateError = ""; return; }
+  // Held in state, not re-rendered, so typing is never interrupted.
+  if (el.dataset.info && state.infoForm) {
+    state.infoForm[el.dataset.info] = el.type === "checkbox" ? el.checked : el.value;
+    return;
+  }
   if (el.dataset.field && state.form) {
     const f = state.form;
     const field = el.dataset.field;
@@ -544,7 +805,25 @@ app.addEventListener("input", (e) => {
 
 app.addEventListener("change", (e) => {
   if (e.target.dataset.note !== undefined) setNote(e.target.dataset.note, e.target.value);
+  if (e.target.dataset.info && state.infoForm) {
+    state.infoForm[e.target.dataset.info] = e.target.type === "checkbox" ? e.target.checked : e.target.value;
+  }
 });
+
+function saveInfo() {
+  const id = state.infoEditing;
+  const f = state.infoForm || {};
+  const row = { fullName: String(f.fullName || "").trim() };
+  for (const fd of INFO_FIELDS) {
+    const v = f[fd.key];
+    if (fd.type === "tick") { if (v) row[fd.key] = true; }
+    else if (v !== undefined && String(v).trim() !== "") row[fd.key] = String(v).trim();
+  }
+  store.apply((d) => ({ ...d, info: { ...d.info, [id]: row } }));
+  state.infoEditing = null;
+  state.infoForm = null;
+  render();
+}
 
 app.addEventListener("keydown", (e) => {
   if (e.key !== "Enter") return;
@@ -560,10 +839,26 @@ app.addEventListener("keydown", (e) => {
     if (saved && coachById(saved)) state.meId = saved;
   } catch { /* private mode */ }
 
+  let seeded = false;
   await store.start((data) => {
     state.data = data;
     state.ready = true;
     render();
+    // First run only: puts the club sheet's starting values in. Once every row
+    // has been saved in the app, the SEED block above can be deleted.
+    if (seeded) return;
+    if (SEED && Object.keys(data.info || {}).length === 0) {
+      seeded = true;
+      const rows = {};
+      for (const c of COACHES) if (SEED[c.id]) rows[c.id] = SEED[c.id];
+      if (Object.keys(rows).length) {
+        store.apply((d) => ({ ...d, info: { ...rows, ...d.info }, infoVersion: INFO_VERSION }));
+      }
+    } else if (Number(data.infoVersion || 1) < INFO_VERSION) {
+      // Rows saved under the old column names — remap them once.
+      seeded = true;
+      store.apply((d) => migrateInfo(d) || d);
+    }
   });
 
   state.ready = true;
