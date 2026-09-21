@@ -206,7 +206,10 @@ const store = {
 function normalise(raw) {
   const d = raw && typeof raw === "object" ? raw : {};
   const sessions = Array.isArray(d.sessions) ? d.sessions : Object.values(d.sessions || {});
+  const tr = d.trophy || {};
+  const list = (x) => (Array.isArray(x) ? x : Object.values(x || {})).filter(Boolean);
   return { sessions: sessions.filter(Boolean), responses: d.responses || {}, info: d.info || {},
+           trophy: { players: list(tr.players), awards: list(tr.awards) },
            infoVersion: d.infoVersion || 1 };
 }
 
@@ -228,6 +231,10 @@ const state = {
   form: null,
   infoEditing: null,
   infoForm: null,
+  trophyForm: null,
+  trophyNew: "",
+  trophyConfirm: null,
+  trophyPlayerConfirm: null,
 };
 
 const app = document.getElementById("app");
@@ -294,8 +301,9 @@ function mainHtml() {
       <button class="tab" data-act="view" data-view="calendar" data-on="${state.view === "calendar"}">Calendar</button>
       <button class="tab" data-act="view" data-view="list" data-on="${state.view === "list"}">Upcoming</button>
       <button class="tab" data-act="view" data-view="info" data-on="${state.view === "info"}">Coach Info</button>
+      <button class="tab" data-act="view" data-view="trophy" data-on="${state.view === "trophy"}"><span class="lg">Endeavour Trophy</span><span class="sm">Trophy</span></button>
     </div>
-    ${state.view === "calendar" ? calendarHtml() + dayPanelHtml() : state.view === "list" ? listHtml() : infoHtml()}
+    ${state.view === "calendar" ? calendarHtml() + dayPanelHtml() : state.view === "list" ? listHtml() : state.view === "info" ? infoHtml() : trophyHtml()}
     <p class="note">
       ${store.mode === "cloud" ? "Shared with every coach on the list. Answers save the moment you tap them." : "Saving on this device only — add your Firebase details to share with the squad."}
       <br /><button class="linkish" data-act="reload">Reload</button>
@@ -498,6 +506,166 @@ function infoFormHtml() {
       </div>
     </div>
   </div>`;
+}
+
+/* ------------------------------------------------------ endeavour trophy */
+
+const trophyOf = () => state.data.trophy || { players: [], awards: [] };
+const shortDay = (v) => { const d = fromIso(v); return isNaN(d) ? "" : `${d.getDate()} ${SHORT_MONTHS[d.getMonth()]}`; };
+const byName = (a, b) => a.name.localeCompare(b.name);
+
+// Works the rounds out from the award log: a round closes once every player
+// on the list has had the trophy, and the next award starts a new one.
+function trophyRounds(t) {
+  const live = new Set(t.players.map((p) => p.id));
+  const awards = t.awards.filter((a) => live.has(a.playerId))
+    .sort((a, b) => (a.date || "").localeCompare(b.date || "") || (a.at || 0) - (b.at || 0));
+  const rounds = [];
+  let cur = {};
+  for (const a of awards) {
+    if (cur[a.playerId]) { rounds.push(cur); cur = {}; }
+    cur[a.playerId] = a;
+    if (live.size && Object.keys(cur).length >= live.size) { rounds.push(cur); cur = {}; }
+  }
+  rounds.push(cur);
+  return rounds;
+}
+
+function trophyHtml() {
+  const t = trophyOf();
+  const players = [...t.players].sort(byName);
+  const rounds = trophyRounds(t);
+  const current = rounds[rounds.length - 1];
+  const roundNo = rounds.length;
+  const pending = players.filter((p) => !current[p.id]);
+  const counts = {};
+  for (const r of rounds) for (const id of Object.keys(r)) counts[id] = (counts[id] || 0) + 1;
+  const nameOf = (id) => t.players.find((p) => p.id === id)?.name || "Removed player";
+  const recent = [...t.awards].sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.at || 0) - (a.at || 0)).slice(0, 8);
+
+  const table = players.length ? `
+    <div class="scrollnote">Swipe sideways for earlier rounds · tap Award to give it out</div>
+    <div class="tablewrap">
+      <table class="ctable ttable">
+        <thead><tr>
+          <th class="stick sub">Player</th>
+          ${rounds.map((_, i) => `<th${i === roundNo - 1 ? ` class="now"` : ""}>Round ${i + 1}${i === roundNo - 1 ? " · now" : ""}</th>`).join("")}
+          <th>Times</th>
+        </tr></thead>
+        <tbody>
+          ${players.map((p) => `<tr>
+            <th class="stick" data-flag="${current[p.id] ? "ok" : "soon"}"><span class="tname">${esc(p.name)}</span></th>
+            ${rounds.map((r, i) => {
+              const a = r[p.id];
+              if (a) return `<td class="t-won"><span>✓</span><em>${esc(shortDay(a.date))}</em></td>`;
+              if (i === roundNo - 1) return `<td class="t-pending"><button data-act="trophy-award-open" data-id="${p.id}">Award</button></td>`;
+              return `<td class="t-none">–</td>`;
+            }).join("")}
+            <td class="t-count">${counts[p.id] || 0}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>
+    </div>` : "";
+
+  return `
+  <div class="panel">
+    <div class="panelhead">
+      <div class="daytitle">Endeavour Trophy</div>
+      ${players.length ? `<button class="add" data-act="trophy-award-open">+ Award</button>` : ""}
+    </div>
+
+    ${state.trophyForm ? trophyFormHtml(players, current) : ""}
+
+    ${players.length ? `
+    <div class="statstrip">
+      <div class="stat" data-tone="good"><b>${roundNo}</b><span>Round</span></div>
+      <div class="stat"><b>${players.length - pending.length}/${players.length}</b><span>Had it</span></div>
+      <div class="stat" data-tone="${pending.length ? "warn" : "good"}"><b>${pending.length}</b><span>Still to go</span></div>
+    </div>
+
+    ${roundNo > 1 && pending.length === players.length ? `
+      <div class="roundnote">Round ${roundNo - 1} complete — everyone's had a turn. Round ${roundNo} starts with the next award.</div>` : ""}
+
+    ${pending.length ? `
+    <div class="stillto">
+      <div class="grouplabel">Still to go this round</div>
+      <div class="pchips">${pending.map((p) =>
+        `<button class="pchip" data-act="trophy-award-open" data-id="${p.id}">${esc(p.name)}</button>`).join("")}</div>
+    </div>` : ""}
+
+    ${table}` : `
+    <div class="empty">Add the squad below to start the rotation. First names or initials are plenty.</div>`}
+
+    ${recent.length ? `
+    <div class="grouplabel" style="margin-top:20px">Recent awards</div>
+    <div class="history">
+      ${recent.map((a) => `
+        <div class="hrow">
+          <span class="hdate">${esc(shortDay(a.date))}</span>
+          <span class="hname">${esc(nameOf(a.playerId))}</span>
+          ${state.trophyConfirm === a.id
+            ? `<button class="mini" data-danger="true" data-act="trophy-remove" data-id="${a.id}">Confirm remove</button>
+               <button class="mini" data-act="trophy-remove-cancel">Keep</button>`
+            : `<button class="mini" data-danger="true" data-act="trophy-remove-open" data-id="${a.id}">Remove</button>`}
+        </div>`).join("")}
+    </div>` : ""}
+
+    <div class="grouplabel" style="margin-top:20px">Squad</div>
+    <div class="form squad">
+      ${players.map((p) => `
+        <div class="srow">
+          <span>${esc(p.name)}</span>
+          ${state.trophyPlayerConfirm === p.id
+            ? `<button class="mini" data-danger="true" data-act="trophy-player-remove" data-id="${p.id}">Confirm remove</button>
+               <button class="mini" data-act="trophy-player-cancel">Keep</button>`
+            : `<button class="mini" data-danger="true" data-act="trophy-player-open" data-id="${p.id}">Remove</button>`}
+        </div>`).join("")}
+      <div class="addrow">
+        <input id="t-newplayer" value="${esc(state.trophyNew)}" placeholder="First name or initials" autocomplete="off" />
+        <button class="primary" data-act="trophy-player-add">Add</button>
+      </div>
+      <div class="field-hint">Visible to anyone with the app link, so keep it to first names or initials.</div>
+    </div>
+  </div>`;
+}
+
+function trophyFormHtml(players, current) {
+  const f = state.trophyForm;
+  const pending = players.filter((p) => !current[p.id]);
+  const done = players.filter((p) => current[p.id]);
+  const opt = (p) => `<option value="${p.id}"${p.id === f.playerId ? " selected" : ""}>${esc(p.name)}</option>`;
+  return `
+  <div class="form">
+    <label for="t-player">Who gets it</label>
+    <select id="t-player" data-trophy="playerId">
+      ${pending.length ? `<optgroup label="Still to go">${pending.map(opt).join("")}</optgroup>` : ""}
+      ${done.length ? `<optgroup label="Already had it this round">${done.map(opt).join("")}</optgroup>` : ""}
+    </select>
+    <label for="t-date">Date</label>
+    <input id="t-date" type="date" data-trophy="date" value="${esc(f.date)}" />
+    <div class="actions">
+      <button class="primary" data-act="trophy-award-save" ${f.playerId && f.date ? "" : "disabled"}>Give the trophy</button>
+      <button class="ghost" data-act="trophy-award-cancel">Cancel</button>
+    </div>
+  </div>`;
+}
+
+function addPlayer() {
+  const name = String(state.trophyNew || "").trim();
+  if (!name) return;
+  const player = { id: uid(), name };
+  store.apply((d) => ({ ...d, trophy: { ...d.trophy, players: [...d.trophy.players, player] } }));
+  state.trophyNew = "";
+  render();
+}
+
+function saveAward() {
+  const f = state.trophyForm;
+  if (!f || !f.playerId || !f.date) return;
+  const award = { id: uid(), playerId: f.playerId, date: f.date, at: Date.now() };
+  store.apply((d) => ({ ...d, trophy: { ...d.trophy, awards: [...d.trophy.awards, award] } }));
+  state.trophyForm = null;
+  render();
 }
 
 function cardHtml(s, showDate) {
@@ -764,6 +932,33 @@ app.addEventListener("click", (e) => {
   }
   if (act === "info-cancel") { state.infoEditing = null; state.infoForm = null; return render(); }
   if (act === "info-save") return saveInfo();
+  if (act === "trophy-award-open") {
+    const t = trophyOf();
+    const rounds = trophyRounds(t);
+    const current = rounds[rounds.length - 1];
+    const firstPending = [...t.players].sort(byName).find((p) => !current[p.id]);
+    state.trophyForm = { playerId: id || firstPending?.id || t.players[0]?.id || "", date: today };
+    return render();
+  }
+  if (act === "trophy-award-cancel") { state.trophyForm = null; return render(); }
+  if (act === "trophy-award-save") return saveAward();
+  if (act === "trophy-remove-open") { state.trophyConfirm = id; return render(); }
+  if (act === "trophy-remove-cancel") { state.trophyConfirm = null; return render(); }
+  if (act === "trophy-remove") {
+    state.trophyConfirm = null;
+    return store.apply((d) => ({ ...d, trophy: { ...d.trophy, awards: d.trophy.awards.filter((a) => a.id !== id) } }));
+  }
+  if (act === "trophy-player-add") return addPlayer();
+  if (act === "trophy-player-open") { state.trophyPlayerConfirm = id; return render(); }
+  if (act === "trophy-player-cancel") { state.trophyPlayerConfirm = null; return render(); }
+  if (act === "trophy-player-remove") {
+    state.trophyPlayerConfirm = null;
+    // Their awards go too, so the rounds recalculate cleanly.
+    return store.apply((d) => ({ ...d, trophy: {
+      players: d.trophy.players.filter((p) => p.id !== id),
+      awards: d.trophy.awards.filter((a) => a.playerId !== id),
+    } }));
+  }
   if (act === "add-open") {
     state.view = "calendar"; state.editingId = null; state.confirmingId = null;
     state.adding = true; state.form = blankForm(state.selected);
@@ -787,6 +982,12 @@ app.addEventListener("input", (e) => {
   const el = e.target;
   if (el.id === "name") { state.entry = el.value; state.gateError = ""; return; }
   // Held in state, not re-rendered, so typing is never interrupted.
+  if (el.id === "t-newplayer") { state.trophyNew = el.value; return; }
+  if (el.dataset.trophy && state.trophyForm) {
+    state.trophyForm[el.dataset.trophy] = el.value;
+    if (el.dataset.trophy === "date") render();
+    return;
+  }
   if (el.dataset.info && state.infoForm) {
     state.infoForm[el.dataset.info] = el.type === "checkbox" ? el.checked : el.value;
     return;
@@ -805,6 +1006,9 @@ app.addEventListener("input", (e) => {
 
 app.addEventListener("change", (e) => {
   if (e.target.dataset.note !== undefined) setNote(e.target.dataset.note, e.target.value);
+  if (e.target.dataset.trophy && state.trophyForm) {
+    state.trophyForm[e.target.dataset.trophy] = e.target.value;
+  }
   if (e.target.dataset.info && state.infoForm) {
     state.infoForm[e.target.dataset.info] = e.target.type === "checkbox" ? e.target.checked : e.target.value;
   }
@@ -828,6 +1032,7 @@ function saveInfo() {
 app.addEventListener("keydown", (e) => {
   if (e.key !== "Enter") return;
   if (e.target.id === "name") { e.preventDefault(); signIn(e.target.value); }
+  if (e.target.id === "t-newplayer") { e.preventDefault(); addPlayer(); }
   if (e.target.dataset.note !== undefined) { e.preventDefault(); e.target.blur(); }
 });
 
