@@ -235,6 +235,10 @@ const state = {
   trophyNew: "",
   trophyConfirm: null,
   trophyPlayerConfirm: null,
+  bdayManage: false,
+  bdayNew: { name: "", d: "", m: "" },
+  bdayPaste: "",
+  bdayMsg: "",
 };
 
 const app = document.getElementById("app");
@@ -303,7 +307,7 @@ function mainHtml() {
       <button class="tab" data-act="view" data-view="info" data-on="${state.view === "info"}">Coach Info</button>
       <button class="tab" data-act="view" data-view="trophy" data-on="${state.view === "trophy"}"><span class="lg">Endeavour Trophy</span><span class="sm">Trophy</span></button>
     </div>
-    ${state.view === "calendar" ? calendarHtml() + dayPanelHtml() : state.view === "list" ? listHtml() : state.view === "info" ? infoHtml() : trophyHtml()}
+    ${state.view === "calendar" ? calendarHtml() + (state.bdayManage ? "" : bdayStripHtml()) + dayPanelHtml() : state.view === "list" ? listHtml() : state.view === "info" ? infoHtml() : trophyHtml()}
     <p class="note">
       ${store.mode === "cloud" ? "Shared with every coach on the list. Answers save the moment you tap them." : "Saving on this device only — add your Firebase details to share with the squad."}
       <br /><button class="linkish" data-act="reload">Reload</button>
@@ -335,8 +339,9 @@ function calendarHtml() {
         if (!day) return `<button class="cell" disabled></button>`;
         const bars = sessionsOn(day).slice(0, 3)
           .map((s) => `<div class="bar" style="background:${coverColour(s.id)}"></div>`).join("");
+        const cake = birthdaysOn(day).length ? `<span class="cellcake">${CAKE}</span>` : "";
         return `<button class="cell" data-act="day" data-date="${day}"
-          data-sel="${day === state.selected}" data-today="${day === today}">${Number(day.slice(-2))}
+          data-sel="${day === state.selected}" data-today="${day === today}">${cake}${Number(day.slice(-2))}
           <div class="bars">${bars}</div></button>`;
       }).join("")}
     </div>
@@ -344,11 +349,13 @@ function calendarHtml() {
       <span><i style="background:var(--green)"></i>${COVERED_AT}+ coaches in</span>
       <span><i style="background:var(--ink)"></i>1 coach in</span>
       <span><i style="background:var(--red)"></i>nobody yet</span>
+      <button class="legendlink" data-act="bday-open">${CAKE}Birthdays</button>
     </div>
   </div>`;
 }
 
 function dayPanelHtml() {
+  if (state.bdayManage) return bdayManageHtml();
   const list = sessionsOn(state.selected);
   return `
   <div class="panel">
@@ -356,6 +363,8 @@ function dayPanelHtml() {
       <div class="daytitle">${longDate(state.selected)}</div>
       <button class="add" data-act="add-open">+ Session</button>
     </div>
+    ${birthdaysOn(state.selected).map((p) => `
+      <div class="bdayline">${CAKE}<span>Happy birthday, <b>${esc(p.name)}</b>!</span></div>`).join("")}
     ${state.adding ? formHtml(null) : ""}
     ${list.map(cardHtml).join("")}
     ${!state.adding && list.length === 0
@@ -373,9 +382,188 @@ function listHtml() {
       <div class="daytitle">Next up</div>
       <button class="add" data-act="add-open">+ Session</button>
     </div>
+    ${bdayStripHtml()}
     ${upcoming.map((s) => cardHtml(s, true)).join("")}
     ${upcoming.length === 0 ? `<div class="empty">Nothing in the diary yet. Add your next training session or game.</div>` : ""}
   </div>`;
+}
+
+/* --------------------------------------------------------------- birthdays */
+
+// Birthdays sit on the same squad list as the Endeavour Trophy. Stored as
+// "MM-DD" only — no year, so no ages or full dates of birth are kept.
+const CAKE = `<svg class="cakeicon" viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M12 1.6c1.3 1.5 1.3 2.8 0 3.7-1.3-.9-1.3-2.2 0-3.7z" fill="#F2A516"/>
+  <rect x="11.2" y="5.4" width="1.6" height="4.2" rx=".5" fill="#101012"/>
+  <rect x="4.2" y="9.6" width="15.6" height="4.6" rx="1.4" fill="#DE1E2D"/>
+  <rect x="3" y="13.6" width="18" height="7.6" rx="1.6" fill="#fff" stroke="#101012" stroke-width="1.4"/>
+  <path d="M3.8 17c1.4 1 2.9 1 4.2 0s2.8-1 4 0 2.8 1 4 0 2.8-1 4.2 0" fill="none" stroke="#DE1E2D" stroke-width="1.3"/>
+</svg>`;
+
+const MONTH_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+const isLeap = (y) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+const squad = () => [...(state.data.trophy?.players || [])];
+
+const bdayLabel = (b) => {
+  if (!b) return "";
+  const [m, d] = b.split("-").map(Number);
+  return `${d} ${SHORT_MONTHS[m - 1]}`;
+};
+
+// A 29 Feb birthday is celebrated on the 28th in non-leap years.
+const bdayMatches = (b, date) => {
+  if (!b) return false;
+  const md = date.slice(5);
+  if (b === md) return true;
+  return b === "02-29" && md === "02-28" && !isLeap(Number(date.slice(0, 4)));
+};
+
+const birthdaysOn = (date) => squad().filter((p) => bdayMatches(p.bday, date)).sort(byName);
+
+function birthdaysAhead(days) {
+  const out = [];
+  const start = fromIso(today);
+  for (let i = 0; i <= days; i++) {
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+    for (const p of birthdaysOn(iso(d))) out.push({ p, date: iso(d), inDays: i });
+  }
+  return out;
+}
+
+function bdayStripHtml() {
+  const soon = birthdaysAhead(14);
+  if (!soon.length) return "";
+  return `
+  <div class="bdaystrip">
+    ${CAKE}
+    <div class="bdaylist">
+      <span class="bdayhead">Birthdays coming up</span>
+      ${soon.map(({ p, date, inDays }) => `<span class="bdayitem"><b>${esc(p.name)}</b> ${
+        inDays === 0 ? "today!" : inDays === 1 ? "tomorrow" : esc(longDate(date))}</span>`).join("")}
+    </div>
+  </div>`;
+}
+
+// "Jamie 14 March", "Ava - 3/11", "Leo: 21st Jan", "Mia 1.6.2019" → name + MM-DD.
+// Any year given is dropped.
+const MONTH_WORDS = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+function parseBdayLine(line) {
+  const text = line.trim();
+  if (!text) return null;
+  let m, day, month, name;
+  if ((m = text.match(/^(.*?)[\s,:\-–]*(\d{1,2})(?:st|nd|rd|th)?\s*[\/.\-]\s*(\d{1,2})(?:\s*[\/.\-]\s*\d{2,4})?\s*$/i))) {
+    [, name, day, month] = m;
+  } else if ((m = text.match(/^(.*?)[\s,:\-–]*(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([a-z]{3,})\.?(?:,?\s+\d{4})?\s*$/i))) {
+    [, name, day] = m; month = MONTH_WORDS.indexOf(m[3].slice(0, 3).toLowerCase()) + 1;
+  } else if ((m = text.match(/^(.*?)[\s,:\-–]*([a-z]{3,})\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+\d{4})?\s*$/i))) {
+    name = m[1]; month = MONTH_WORDS.indexOf(m[2].slice(0, 3).toLowerCase()) + 1; day = m[3];
+  } else return { error: text };
+  day = Number(day); month = Number(month);
+  name = String(name || "").replace(/[\s,:\-–]+$/, "").trim();
+  if (!name || !month || month > 12 || !day || day > MONTH_DAYS[month - 1]) return { error: text };
+  return { name, bday: `${pad(month)}-${pad(day)}` };
+}
+
+function bdayManageHtml() {
+  const players = squad().sort(byName);
+  const n = state.bdayNew;
+  const dayOpts = (sel) => `<option value="">Day</option>` +
+    Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}"${Number(sel) === i + 1 ? " selected" : ""}>${i + 1}</option>`).join("");
+  const monOpts = (sel) => `<option value="">Month</option>` +
+    SHORT_MONTHS.map((mn, i) => `<option value="${i + 1}"${Number(sel) === i + 1 ? " selected" : ""}>${mn}</option>`).join("");
+
+  return `
+  <div class="panel">
+    <div class="panelhead">
+      <div class="daytitle">Birthdays</div>
+      <button class="add" data-act="bday-close">Done</button>
+    </div>
+
+    <div class="form bdays">
+      ${players.length ? players.map((p) => {
+        const [bm, bd] = p.bday ? p.bday.split("-").map(Number) : ["", ""];
+        return `
+        <div class="brow" data-id="${p.id}">
+          <span class="bname">${p.bday ? CAKE : ""}${esc(p.name)}</span>
+          <select data-bday="d" aria-label="Day">${dayOpts(bd)}</select>
+          <select data-bday="m" aria-label="Month">${monOpts(bm)}</select>
+          ${p.bday ? `<button class="mini" data-danger="true" data-act="bday-clear" data-id="${p.id}" aria-label="Clear">✕</button>` : `<span class="bspacer"></span>`}
+        </div>`;
+      }).join("") : `<p class="field-hint" style="margin:6px 0 0">No kids on the list yet — add them below.</p>`}
+
+      <div class="grouphead">Add a player</div>
+      <div class="brow">
+        <input id="b-name" value="${esc(n.name)}" placeholder="First name or initials" autocomplete="off" />
+        <select id="b-d" aria-label="Day">${dayOpts(n.d)}</select>
+        <select id="b-m" aria-label="Month">${monOpts(n.m)}</select>
+      </div>
+      <div class="actions"><button class="primary" data-act="bday-add">Add</button></div>
+
+      <div class="grouphead">Paste a list</div>
+      <textarea id="b-paste" rows="5" placeholder="One per line, e.g.&#10;Jamie 14 March&#10;Ava 3/11&#10;Leo - 21st Jan">${esc(state.bdayPaste)}</textarea>
+      <div class="actions"><button class="primary" data-act="bday-import">Add list</button></div>
+      ${state.bdayMsg ? `<div class="bdaymsg">${state.bdayMsg}</div>` : ""}
+
+      <div class="field-hint">Day and month only — no year, so no ages are stored. Kids added here also join the Endeavour Trophy rotation. Visible to anyone with the app link, so keep to first names or initials.</div>
+    </div>
+  </div>`;
+}
+
+const setBday = (id, bday) => store.apply((d) => ({ ...d, trophy: { ...d.trophy,
+  players: d.trophy.players.map((p) => {
+    if (p.id !== id) return p;
+    const next = { ...p };
+    if (bday) next.bday = bday; else delete next.bday;
+    return next;
+  }) } }));
+
+function addBdayPlayer() {
+  const { name, d, m } = state.bdayNew;
+  const clean = String(name || "").trim();
+  if (!clean) { state.bdayMsg = "Type a name first."; return render(); }
+  let bday = null;
+  if (d && m) {
+    if (Number(d) > MONTH_DAYS[Number(m) - 1]) { state.bdayMsg = "That date doesn't exist."; return render(); }
+    bday = `${pad(m)}-${pad(d)}`;
+  }
+  const existing = squad().find((p) => p.name.toLowerCase() === clean.toLowerCase());
+  if (existing) {
+    if (bday) setBday(existing.id, bday);
+  } else {
+    const player = { id: uid(), name: clean, ...(bday ? { bday } : {}) };
+    store.apply((dd) => ({ ...dd, trophy: { ...dd.trophy, players: [...dd.trophy.players, player] } }));
+  }
+  state.bdayNew = { name: "", d: "", m: "" };
+  state.bdayMsg = existing ? `Updated ${esc(existing.name)}.` : `Added ${esc(clean)}.`;
+  render();
+}
+
+function importBdays() {
+  const lines = String(state.bdayPaste || "").split(/\r?\n/).filter((l) => l.trim());
+  if (!lines.length) return;
+  const parsed = lines.map(parseBdayLine).filter(Boolean);
+  const good = parsed.filter((x) => !x.error);
+  const bad = parsed.filter((x) => x.error);
+  // Count against the list as it stands now, before the save lands.
+  const known = new Set(squad().map((p) => p.name.toLowerCase()));
+  const added = good.filter((g) => !known.has(g.name.toLowerCase())).length;
+  const updated = good.length - added;
+  store.apply((d) => {
+    const players = [...d.trophy.players];
+    for (const { name, bday } of good) {
+      const i = players.findIndex((p) => p.name.toLowerCase() === name.toLowerCase());
+      if (i >= 0) players[i] = { ...players[i], bday };
+      else players.push({ id: uid(), name, bday });
+    }
+    return { ...d, trophy: { ...d.trophy, players } };
+  });
+  state.bdayPaste = bad.map((b) => b.error).join("\n");
+  state.bdayMsg = [
+    added ? `Added ${added}.` : "",
+    updated ? `Updated ${updated}.` : "",
+    bad.length ? `Couldn't read ${bad.length} line${bad.length > 1 ? "s" : ""} — left in the box to fix.` : "",
+  ].filter(Boolean).join(" ");
+  render();
 }
 
 /* ------------------------------------------------------- coach info view */
@@ -921,6 +1109,7 @@ app.addEventListener("click", (e) => {
     return render();
   }
   if (act === "day") {
+    state.bdayManage = false;
     state.selected = date; state.adding = false; state.editingId = null; state.confirmingId = null; state.form = null;
     return render();
   }
@@ -949,6 +1138,11 @@ app.addEventListener("click", (e) => {
     return store.apply((d) => ({ ...d, trophy: { ...d.trophy, awards: d.trophy.awards.filter((a) => a.id !== id) } }));
   }
   if (act === "trophy-player-add") return addPlayer();
+  if (act === "bday-open") { state.bdayManage = true; state.adding = false; state.editingId = null; state.bdayMsg = ""; return render(); }
+  if (act === "bday-close") { state.bdayManage = false; state.bdayMsg = ""; return render(); }
+  if (act === "bday-clear") return setBday(id, null);
+  if (act === "bday-add") return addBdayPlayer();
+  if (act === "bday-import") return importBdays();
   if (act === "trophy-player-open") { state.trophyPlayerConfirm = id; return render(); }
   if (act === "trophy-player-cancel") { state.trophyPlayerConfirm = null; return render(); }
   if (act === "trophy-player-remove") {
@@ -983,6 +1177,8 @@ app.addEventListener("input", (e) => {
   if (el.id === "name") { state.entry = el.value; state.gateError = ""; return; }
   // Held in state, not re-rendered, so typing is never interrupted.
   if (el.id === "t-newplayer") { state.trophyNew = el.value; return; }
+  if (el.id === "b-name") { state.bdayNew.name = el.value; return; }
+  if (el.id === "b-paste") { state.bdayPaste = el.value; return; }
   if (el.dataset.trophy && state.trophyForm) {
     state.trophyForm[el.dataset.trophy] = el.value;
     if (el.dataset.trophy === "date") render();
@@ -1006,6 +1202,15 @@ app.addEventListener("input", (e) => {
 
 app.addEventListener("change", (e) => {
   if (e.target.dataset.note !== undefined) setNote(e.target.dataset.note, e.target.value);
+  if (e.target.id === "b-d") state.bdayNew.d = e.target.value;
+  if (e.target.id === "b-m") state.bdayNew.m = e.target.value;
+  if (e.target.dataset.bday) {
+    const row = e.target.closest(".brow");
+    const d = row.querySelector('[data-bday="d"]').value;
+    const m = row.querySelector('[data-bday="m"]').value;
+    if (d && m && Number(d) <= MONTH_DAYS[Number(m) - 1]) setBday(row.dataset.id, `${pad(m)}-${pad(d)}`);
+    else if (!d && !m) setBday(row.dataset.id, null);
+  }
   if (e.target.dataset.trophy && state.trophyForm) {
     state.trophyForm[e.target.dataset.trophy] = e.target.value;
   }

@@ -327,3 +327,45 @@ body { -webkit-tap-highlight-color: rgba(222,30,45,.15); }
 .ca .addrow input { flex: 1; min-width: 0; }
 .ca .addrow .primary { flex: none; padding: 11px 18px; }
 .ca .field-hint { font-size: 12px; color: var(--ink-3); margin-top: 8px; }
+
+/* ------------------------------------------------------------ birthdays */
+.ca .cakeicon { width: 18px; height: 18px; flex: none; display: inline-block; vertical-align: middle; }
+
+.ca .cell { position: relative; }
+.ca .cellcake { position: absolute; top: 2px; right: 2px; line-height: 0; }
+.ca .cellcake .cakeicon { width: 12px; height: 12px; }
+
+.ca .legendlink { margin-left: auto; display: inline-flex; align-items: center; gap: 5px;
+  background: none; border: 0; padding: 0; cursor: pointer; font-family: var(--body);
+  font-size: 11.5px; color: var(--ink-3); text-decoration: underline; }
+.ca .legendlink .cakeicon { width: 13px; height: 13px; }
+.ca .legendlink:hover { color: var(--ink); }
+
+.ca .bdaystrip { display: flex; align-items: flex-start; gap: 10px; margin-top: 14px;
+  background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--red);
+  border-radius: 3px; padding: 9px 12px; }
+.ca .bdaystrip > .cakeicon { width: 22px; height: 22px; margin-top: 1px; }
+.ca .bdaylist { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; font-size: 13.5px; color: var(--ink-2); }
+.ca .bdayhead { width: 100%; font-family: var(--disp); font-size: 11px; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--ink-3); }
+.ca .bdayitem b { color: var(--ink); font-weight: 600; }
+
+.ca .bdayline { display: flex; align-items: center; gap: 10px; background: var(--card);
+  border: 1px solid var(--line); border-left: 4px solid var(--red); border-radius: 3px;
+  padding: 10px 13px; margin-bottom: 10px; font-size: 15px; color: var(--ink-2); }
+.ca .bdayline .cakeicon { width: 24px; height: 24px; }
+.ca .bdayline b { color: var(--ink); }
+
+.ca .bdays { padding-top: 8px; }
+.ca .brow { display: flex; align-items: center; gap: 6px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.ca .brow .bname { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;
+  font-size: 14.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ca .brow .bname .cakeicon { width: 15px; height: 15px; }
+.ca .brow select { width: auto; flex: none; padding: 7px 6px; font-size: 14px; }
+.ca .brow input { flex: 1; min-width: 0; }
+.ca .brow .mini, .ca .brow .bspacer { width: 26px; flex: none; text-align: center; }
+.ca .bdays textarea { width: 100%; padding: 10px 11px; border: 1.5px solid var(--line); border-radius: 3px;
+  font-family: var(--body); font-size: 15px; color: var(--ink); resize: vertical; }
+.ca .bdays textarea:focus { outline: 2px solid var(--red); outline-offset: 1px; border-color: var(--red); }
+.ca .bdaymsg { font-size: 13px; color: var(--green); margin-top: 10px; }
+.ca .bdays .field-hint { margin-top: 14px; }
