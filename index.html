@@ -23,12 +23,30 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="styles.css" />
+
+<script>
+  // Phones — and the home-screen app especially — hang on to styles.css and
+  // app.js because the filenames never change, so an update can look like
+  // nothing happened. Loading them with a stamp that ticks over every minute
+  // means a new version always appears within a minute of being uploaded.
+  (function () {
+    var v = "?v=" + Math.floor(Date.now() / 60000);
+    var css = document.createElement("link");
+    css.rel = "stylesheet";
+    css.href = "styles.css" + v;
+    document.head.appendChild(css);
+    window.addEventListener("DOMContentLoaded", function () {
+      var js = document.createElement("script");
+      js.type = "module";
+      js.src = "app.js" + v;
+      document.body.appendChild(js);
+    });
+  })();
+</script>
 </head>
 <body>
   <div id="app" class="ca">
     <div class="wrap"><p class="note" style="margin-top:60px">Opening the diary…</p></div>
   </div>
-  <script type="module" src="app.js"></script>
 </body>
 </html>

@@ -210,7 +210,8 @@ function normalise(raw) {
   const list = (x) => (Array.isArray(x) ? x : Object.values(x || {})).filter(Boolean);
   return { sessions: sessions.filter(Boolean), responses: d.responses || {}, info: d.info || {},
            trophy: { players: list(tr.players), awards: list(tr.awards) },
-           infoVersion: d.infoVersion || 1 };
+           infoVersion: d.infoVersion || 1,
+           teamMoves: list(d.teamMoves), teams: list(d.teams), teamsSet: Boolean(d.teamsSet) };
 }
 
 /* ------------------------------------------------------------------ state */
@@ -235,6 +236,14 @@ const state = {
   trophyNew: "",
   trophyConfirm: null,
   trophyPlayerConfirm: null,
+  teamMoving: null,
+  teamNew: "",
+  teamRemove: null,
+  teamHistory: false,
+  teamDelete: null,
+  teamNewName: "",
+  teamNewColour: "green",
+  teamMsg: "",
   bdayManage: false,
   bdayNew: { name: "", d: "", m: "" },
   bdayPaste: "",
@@ -304,10 +313,11 @@ function mainHtml() {
     <div class="tabs">
       <button class="tab" data-act="view" data-view="calendar" data-on="${state.view === "calendar"}">Calendar</button>
       <button class="tab" data-act="view" data-view="list" data-on="${state.view === "list"}">Upcoming</button>
-      <button class="tab" data-act="view" data-view="info" data-on="${state.view === "info"}">Coach Info</button>
+      <button class="tab" data-act="view" data-view="teams" data-on="${state.view === "teams"}">Teams</button>
+      <button class="tab" data-act="view" data-view="info" data-on="${state.view === "info"}"><span class="lg">Coach Info</span><span class="sm">Info</span></button>
       <button class="tab" data-act="view" data-view="trophy" data-on="${state.view === "trophy"}"><span class="lg">Endeavour Trophy</span><span class="sm">Trophy</span></button>
     </div>
-    ${state.view === "calendar" ? calendarHtml() + (state.bdayManage ? "" : bdayStripHtml()) + dayPanelHtml() : state.view === "list" ? listHtml() : state.view === "info" ? infoHtml() : trophyHtml()}
+    ${state.view === "calendar" ? calendarHtml() + (state.bdayManage ? "" : bdayStripHtml()) + dayPanelHtml() : state.view === "list" ? listHtml() : state.view === "teams" ? teamsHtml() : state.view === "info" ? infoHtml() : trophyHtml()}
     <p class="note">
       ${store.mode === "cloud" ? "Shared with every coach on the list. Answers save the moment you tap them." : "Saving on this device only — add your Firebase details to share with the squad."}
       <br /><button class="linkish" data-act="reload">Reload</button>
@@ -566,6 +576,295 @@ function importBdays() {
   render();
 }
 
+/* ------------------------------------------------------------------ teams */
+
+// Bib colours only on screen. What each one means is the coaches' business,
+// not something a child or a passing parent should read off a phone.
+// Teams are stored data, not fixed in the code. Colours come from this palette
+// so a new team styles itself without any new CSS.
+const PALETTE = {
+  red:    { label: "Red",    bar: "#DE1E2D", bg: "#FCEBEB", ink: "#6E1B1B", line: "#F2C9C9", dot: "#DE1E2D" },
+  blue:   { label: "Blue",   bar: "#2E6DB4", bg: "#E9F1FA", ink: "#16416E", line: "#C6DAF0", dot: "#2E6DB4" },
+  white:  { label: "White",  bar: "#9A9AA2", bg: "#FFFFFF", ink: "#101012", line: "#DEDEE1", dot: "#FFFFFF" },
+  green:  { label: "Green",  bar: "#1E8A4B", bg: "#E8F4EC", ink: "#145130", line: "#C2E2CF", dot: "#1E8A4B" },
+  amber:  { label: "Amber",  bar: "#B9761B", bg: "#FBF3E6", ink: "#6E4510", line: "#EFD9B6", dot: "#B9761B" },
+  purple: { label: "Purple", bar: "#6B4FB8", bg: "#EFEBFA", ink: "#3C2C72", line: "#D5CBF0", dot: "#6B4FB8" },
+  teal:   { label: "Teal",   bar: "#17807A", bg: "#E4F2F1", ink: "#0D4A47", line: "#BCDFDD", dot: "#17807A" },
+  black:  { label: "Black",  bar: "#101012", bg: "#EFEFF0", ink: "#101012", line: "#CFCFD3", dot: "#101012" },
+};
+const DEFAULT_TEAMS = [
+  { id: "red", name: "Red", colour: "red" },
+  { id: "blue", name: "Blue", colour: "blue" },
+  { id: "white", name: "White", colour: "white" },
+];
+const NO_TEAM = { bar: "#C4C4CA", bg: "#FFFFFF", ink: "#4A4A50", line: "#C4C4CA", dot: "#C4C4CA" };
+
+const teams = () => (state.data.teamsSet ? (state.data.teams || []) : DEFAULT_TEAMS);
+const teamById = (id) => teams().find((t) => t.id === id);
+const teamName = (id) => teamById(id)?.name || "No team";
+const paint = (id) => PALETTE[teamById(id)?.colour] || NO_TEAM;
+
+function teamsHtml() {
+  const list = teams();
+  const players = squad().sort(byName);
+  const inTeam = (id) => players.filter((p) => (p.team || "") === id);
+  const unassigned = players.filter((p) => !p.team || !list.some((t) => t.id === p.team));
+  const moves = [...(state.data.teamMoves || [])]
+    .sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, state.teamHistory ? 40 : 6);
+  const nameOf = (id) => players.find((p) => p.id === id)?.name || "Removed player";
+  const dot = (id) => `<i class="tdot" style="background:${paint(id).dot};${
+    paint(id).dot === "#FFFFFF" ? "box-shadow:inset 0 0 0 1.5px #7A8B95" : ""}"></i>`;
+
+  const chip = (p) => {
+    const c = paint(p.team || "");
+    return `<button class="tchip" data-act="team-move-open" data-id="${p.id}" data-drag="${p.id}"
+      style="background:${c.bg};color:${c.ink};border-color:${c.line}${p.team ? "" : ";border-style:dashed"}">${esc(p.name)}</button>`;
+  };
+
+  const band = (t) => {
+    const c = t ? paint(t.id) : NO_TEAM;
+    const members = t ? inTeam(t.id) : unassigned;
+    return `
+    <div class="band" data-band="${t ? t.id : ""}" style="border-left-color:${c.bar}${t ? "" : ";border-style:dashed;border-left-style:solid"}">
+      <div class="bandhead">
+        <span class="bandname" style="color:${t ? c.bar : "#7A8B95"}">${esc(t ? t.name : "Not in a team")}</span>
+        <span class="bandcount">${members.length}${t ? ` player${members.length === 1 ? "" : "s"}` : ""}</span>
+      </div>
+      <div class="chips">
+        ${members.map(chip).join("") || `<span class="bandempty">${t ? "Drop a name here" : "Everyone's placed"}</span>`}
+      </div>
+    </div>`;
+  };
+
+  return `
+  <div class="panel">
+    <div class="panelhead">
+      <div class="daytitle">Teams</div>
+      <span class="hint-inline">Drag a name, or tap to move</span>
+    </div>
+
+    ${state.teamMoving ? moveSheetHtml(players) : ""}
+
+    ${list.map(band).join("")}
+    ${band(null)}
+
+    ${moves.length ? `
+      <div class="grouplabel" style="margin-top:20px">Recent moves</div>
+      <div class="history">
+        ${moves.map((m) => `
+          <div class="hrow">
+            <span class="hdate">${esc(shortDay(m.date))}</span>
+            <span class="hname">${esc(nameOf(m.playerId))}</span>
+            <span class="hmove">${dot(m.from)}${esc(teamName(m.from))} → ${dot(m.to)}${esc(teamName(m.to))}</span>
+          </div>`).join("")}
+      </div>
+      ${state.data.teamMoves?.length > 6
+        ? `<button class="linkish" data-act="team-history" style="margin-top:8px">${state.teamHistory ? "Show fewer" : `Show all ${state.data.teamMoves.length}`}</button>` : ""}
+    ` : ""}
+
+    <div class="grouplabel" style="margin-top:20px">Set up teams</div>
+    <div class="form squad">
+      ${list.map((t) => {
+        const n = inTeam(t.id).length;
+        return `
+        <div class="srow">
+          <span class="sname">${dot(t.id)}${esc(t.name)}<em class="scount">${n} player${n === 1 ? "" : "s"}</em></span>
+          ${state.teamDelete === t.id
+            ? `<span><button class="mini" data-danger="true" data-act="team-delete" data-id="${t.id}">Confirm remove</button>
+               <button class="mini" data-act="team-delete-cancel">Keep</button></span>`
+            : `<button class="mini" data-danger="true" data-act="team-delete-open" data-id="${t.id}">Remove</button>`}
+        </div>
+        ${state.teamDelete === t.id && n
+          ? `<div class="field-hint" style="margin:0 0 8px">${n} player${n === 1 ? "" : "s"} will move to "Not in a team". Nobody is deleted.</div>` : ""}`;
+      }).join("")}
+      <div class="addrow">
+        <input id="team-newteam" value="${esc(state.teamNewName)}" placeholder="Team name" autocomplete="off" />
+        <select id="team-newcolour">
+          ${Object.entries(PALETTE).map(([k, v]) =>
+            `<option value="${k}"${k === state.teamNewColour ? " selected" : ""}>${esc(v.label)}</option>`).join("")}
+        </select>
+        <button class="primary" data-act="team-add">Add</button>
+      </div>
+      ${state.teamMsg ? `<div class="field-hint" style="color:var(--red)">${esc(state.teamMsg)}</div>` : ""}
+    </div>
+
+    <div class="grouplabel" style="margin-top:20px">Squad list</div>
+    <div class="form squad">
+      ${players.map((p) => `
+        <div class="srow">
+          <span class="sname">${dot(p.team || "")}${esc(p.name)}</span>
+          ${state.teamRemove === p.id
+            ? `<span><button class="mini" data-danger="true" data-act="team-player-remove" data-id="${p.id}">Confirm remove</button>
+               <button class="mini" data-act="team-player-cancel">Keep</button></span>`
+            : `<button class="mini" data-danger="true" data-act="team-player-open" data-id="${p.id}">Remove</button>`}
+        </div>`).join("")}
+      <div class="addrow">
+        <input id="team-newplayer" value="${esc(state.teamNew)}" placeholder="First name or initials" autocomplete="off" />
+        <button class="primary" data-act="team-player-add">Add</button>
+      </div>
+      <div class="field-hint">This is the master squad list — it drives the Endeavour Trophy and birthdays too. Removing someone here removes them from both. Visible to anyone with the app link, so keep it to first names or initials.</div>
+    </div>
+  </div>`;
+}
+
+function moveSheetHtml(players) {
+  const p = players.find((x) => x.id === state.teamMoving);
+  if (!p) return "";
+  const btn = (id, label, on) => {
+    const c = paint(id);
+    return `<button class="movebtn" data-act="team-set" data-id="${p.id}" data-team="${id}"
+      style="border-color:${c.bar};color:${on ? "#fff" : c.bar}${on ? `;background:${c.bar}` : ""}"${on ? ' data-on="true"' : ""}>${esc(label)}</button>`;
+  };
+  return `
+  <div class="form movesheet">
+    <div class="movename">Move <b>${esc(p.name)}</b> to</div>
+    <div class="movebtns">
+      ${teams().map((t) => btn(t.id, t.name, p.team === t.id)).join("")}
+      ${btn("", "None", !p.team)}
+    </div>
+    <div class="actions"><button class="ghost" data-act="team-move-cancel">Cancel</button></div>
+  </div>`;
+}
+
+function addTeam() {
+  const name = String(state.teamNewName || "").trim();
+  if (!name) { state.teamMsg = "Give the team a name."; return render(); }
+  if (teams().some((t) => t.name.toLowerCase() === name.toLowerCase())) {
+    state.teamMsg = "There's already a team with that name."; return render();
+  }
+  const team = { id: uid(), name, colour: state.teamNewColour || "red" };
+  const current = teams();
+  store.apply((d) => ({ ...d, teamsSet: true, teams: [...(d.teamsSet ? d.teams || [] : current), team] }));
+  state.teamNewName = "";
+  state.teamMsg = "";
+  render();
+}
+
+// Removing a team never deletes players — they drop back to "Not in a team",
+// and each move is logged so the history still makes sense.
+function deleteTeam(id) {
+  const current = teams();
+  const affected = squad().filter((p) => p.team === id);
+  const moves = affected.map((p) => ({
+    id: uid(), playerId: p.id, from: id, to: "", date: today, at: Date.now(),
+  }));
+  store.apply((d) => ({
+    ...d,
+    teamsSet: true,
+    teams: (d.teamsSet ? d.teams || [] : current).filter((t) => t.id !== id),
+    trophy: { ...d.trophy, players: d.trophy.players.map((p) => {
+      if (p.team !== id) return p;
+      const next = { ...p };
+      delete next.team;
+      return next;
+    }) },
+    teamMoves: [...(d.teamMoves || []), ...moves].slice(-200),
+  }));
+  state.teamDelete = null;
+  render();
+}
+
+function setTeam(id, team) {
+  const player = squad().find((p) => p.id === id);
+  if (!player) return;
+  const from = player.team || "";
+  if (from === team) { state.teamMoving = null; return render(); }
+  const move = { id: uid(), playerId: id, from, to: team, date: today, at: Date.now() };
+  store.apply((d) => ({
+    ...d,
+    trophy: { ...d.trophy, players: d.trophy.players.map((p) => {
+      if (p.id !== id) return p;
+      const next = { ...p };
+      if (team) next.team = team; else delete next.team;
+      return next;
+    }) },
+    teamMoves: [...(d.teamMoves || []), move].slice(-200),
+  }));
+  state.teamMoving = null;
+  render();
+}
+
+function addTeamPlayer() {
+  const name = String(state.teamNew || "").trim();
+  if (!name) return;
+  if (squad().some((p) => p.name.toLowerCase() === name.toLowerCase())) {
+    state.teamNew = "";
+    return render();
+  }
+  const player = { id: uid(), name };
+  store.apply((d) => ({ ...d, trophy: { ...d.trophy, players: [...d.trophy.players, player] } }));
+  state.teamNew = "";
+  render();
+}
+
+// Removing from the master list clears their trophy awards and team history too.
+const removeTeamPlayer = (id) => store.apply((d) => ({
+  ...d,
+  trophy: {
+    players: d.trophy.players.filter((p) => p.id !== id),
+    awards: d.trophy.awards.filter((a) => a.playerId !== id),
+  },
+  teamMoves: (d.teamMoves || []).filter((m) => m.playerId !== id),
+}));
+
+/* --- dragging ------------------------------------------------------------
+   HTML5 drag-and-drop doesn't fire on iOS at all, so this is pointer-based:
+   it works the same with a finger or a mouse. A short press-and-move starts
+   the drag; a plain tap falls through to the move sheet. */
+
+const drag = { id: null, ghost: null, from: null, started: false, x: 0, y: 0, chip: null, justDropped: false };
+
+function dragStart(e, chip) {
+  drag.id = chip.dataset.drag;
+  drag.chip = chip;
+  drag.from = chip.closest("[data-band]")?.dataset.band ?? "";
+  drag.started = false;
+  drag.x = e.clientX; drag.y = e.clientY;
+  chip.setPointerCapture?.(e.pointerId);
+}
+
+function dragMove(e) {
+  if (!drag.id) return;
+  if (!drag.started) {
+    if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 8) return;
+    drag.started = true;
+    const r = drag.chip.getBoundingClientRect();
+    drag.ghost = drag.chip.cloneNode(true);
+    drag.ghost.className = "tchip ghostchip";
+    drag.ghost.style.width = `${r.width}px`;
+    document.body.appendChild(drag.ghost);
+    drag.chip.classList.add("lifting");
+  }
+  e.preventDefault();
+  drag.ghost.style.left = `${e.clientX}px`;
+  drag.ghost.style.top = `${e.clientY}px`;
+  const over = dropUnder(e.clientX, e.clientY);
+  for (const b of app.querySelectorAll("[data-band]")) b.classList.toggle("over", b === over);
+}
+
+function dropUnder(x, y) {
+  if (drag.ghost) drag.ghost.style.display = "none";
+  const el = document.elementFromPoint(x, y);
+  if (drag.ghost) drag.ghost.style.display = "";
+  return el?.closest("[data-band]") || null;
+}
+
+function dragEnd(e) {
+  if (!drag.id) return;
+  const wasDragging = drag.started;
+  const band = wasDragging ? dropUnder(e.clientX, e.clientY) : null;
+  const id = drag.id;
+  drag.ghost?.remove();
+  drag.chip?.classList.remove("lifting");
+  for (const b of app.querySelectorAll("[data-band]")) b.classList.remove("over");
+  Object.assign(drag, { id: null, ghost: null, from: null, started: false, chip: null });
+  if (!wasDragging) return;          // a plain tap — the click handler deals with it
+  drag.justDropped = true;           // stop the trailing click opening the move sheet
+  setTimeout(() => { drag.justDropped = false; }, 350);
+  if (band) setTeam(id, band.dataset.band);
+  else render();                      // dropped outside: put the chip back
+}
+
 /* ------------------------------------------------------- coach info view */
 
 function cellHtml(f, info) {
@@ -798,22 +1097,7 @@ function trophyHtml() {
         </div>`).join("")}
     </div>` : ""}
 
-    <div class="grouplabel" style="margin-top:20px">Squad</div>
-    <div class="form squad">
-      ${players.map((p) => `
-        <div class="srow">
-          <span>${esc(p.name)}</span>
-          ${state.trophyPlayerConfirm === p.id
-            ? `<button class="mini" data-danger="true" data-act="trophy-player-remove" data-id="${p.id}">Confirm remove</button>
-               <button class="mini" data-act="trophy-player-cancel">Keep</button>`
-            : `<button class="mini" data-danger="true" data-act="trophy-player-open" data-id="${p.id}">Remove</button>`}
-        </div>`).join("")}
-      <div class="addrow">
-        <input id="t-newplayer" value="${esc(state.trophyNew)}" placeholder="First name or initials" autocomplete="off" />
-        <button class="primary" data-act="trophy-player-add">Add</button>
-      </div>
-      <div class="field-hint">Visible to anyone with the app link, so keep it to first names or initials.</div>
-    </div>
+    <div class="squadnote">The squad list lives in <button class="linkish" data-act="goto-teams">Teams</button> — add or remove players there and the rotation follows.</div>
   </div>`;
 }
 
@@ -1094,6 +1378,14 @@ const removeSession = (id, scope) => store.apply((d) => {
 
 /* ------------------------------------------------------------------ events */
 
+app.addEventListener("pointerdown", (e) => {
+  const chip = e.target.closest("[data-drag]");
+  if (chip && e.isPrimary) dragStart(e, chip);
+});
+app.addEventListener("pointermove", dragMove);
+app.addEventListener("pointerup", dragEnd);
+app.addEventListener("pointercancel", dragEnd);
+
 app.addEventListener("click", (e) => {
   const btn = e.target.closest("[data-act]");
   if (!btn) return;
@@ -1138,6 +1430,23 @@ app.addEventListener("click", (e) => {
     return store.apply((d) => ({ ...d, trophy: { ...d.trophy, awards: d.trophy.awards.filter((a) => a.id !== id) } }));
   }
   if (act === "trophy-player-add") return addPlayer();
+  if (act === "goto-teams") { state.view = "teams"; return render(); }
+  if (act === "team-move-open") {
+    if (drag.justDropped) return;
+    state.teamMoving = id;
+    return render();
+  }
+  if (act === "team-move-cancel") { state.teamMoving = null; return render(); }
+  if (act === "team-set") return setTeam(id, btn.dataset.team);
+  if (act === "team-history") { state.teamHistory = !state.teamHistory; return render(); }
+  if (act === "team-add") return addTeam();
+  if (act === "team-delete-open") { state.teamDelete = id; return render(); }
+  if (act === "team-delete-cancel") { state.teamDelete = null; return render(); }
+  if (act === "team-delete") return deleteTeam(id);
+  if (act === "team-player-add") return addTeamPlayer();
+  if (act === "team-player-open") { state.teamRemove = id; return render(); }
+  if (act === "team-player-cancel") { state.teamRemove = null; return render(); }
+  if (act === "team-player-remove") { state.teamRemove = null; return removeTeamPlayer(id); }
   if (act === "bday-open") { state.bdayManage = true; state.adding = false; state.editingId = null; state.bdayMsg = ""; return render(); }
   if (act === "bday-close") { state.bdayManage = false; state.bdayMsg = ""; return render(); }
   if (act === "bday-clear") return setBday(id, null);
@@ -1177,6 +1486,8 @@ app.addEventListener("input", (e) => {
   if (el.id === "name") { state.entry = el.value; state.gateError = ""; return; }
   // Held in state, not re-rendered, so typing is never interrupted.
   if (el.id === "t-newplayer") { state.trophyNew = el.value; return; }
+  if (el.id === "team-newplayer") { state.teamNew = el.value; return; }
+  if (el.id === "team-newteam") { state.teamNewName = el.value; state.teamMsg = ""; return; }
   if (el.id === "b-name") { state.bdayNew.name = el.value; return; }
   if (el.id === "b-paste") { state.bdayPaste = el.value; return; }
   if (el.dataset.trophy && state.trophyForm) {
@@ -1202,6 +1513,7 @@ app.addEventListener("input", (e) => {
 
 app.addEventListener("change", (e) => {
   if (e.target.dataset.note !== undefined) setNote(e.target.dataset.note, e.target.value);
+  if (e.target.id === "team-newcolour") state.teamNewColour = e.target.value;
   if (e.target.id === "b-d") state.bdayNew.d = e.target.value;
   if (e.target.id === "b-m") state.bdayNew.m = e.target.value;
   if (e.target.dataset.bday) {
@@ -1238,6 +1550,8 @@ app.addEventListener("keydown", (e) => {
   if (e.key !== "Enter") return;
   if (e.target.id === "name") { e.preventDefault(); signIn(e.target.value); }
   if (e.target.id === "t-newplayer") { e.preventDefault(); addPlayer(); }
+  if (e.target.id === "team-newplayer") { e.preventDefault(); addTeamPlayer(); }
+  if (e.target.id === "team-newteam") { e.preventDefault(); addTeam(); }
   if (e.target.dataset.note !== undefined) { e.preventDefault(); e.target.blur(); }
 });
 

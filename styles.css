@@ -49,7 +49,8 @@ body { -webkit-tap-highlight-color: rgba(222,30,45,.15); }
 
 /* ---- tabs ---- */
 .ca .tabs { display: flex; border: 1.5px solid var(--ink); border-radius: 4px; overflow: hidden; margin-bottom: 16px; }
-.ca .tab { flex: 1; border: 0; background: #fff; padding: 10px 0; font-family: var(--disp); font-size: 16px;
+.ca .tab { flex: 1 1 0; min-width: 0; white-space: nowrap; border: 0; background: #fff;
+  padding: 10px 4px; font-family: var(--disp); font-size: 16px;
   font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-2); cursor: pointer; }
 .ca .tab + .tab { border-left: 1.5px solid var(--ink); }
 .ca .tab[data-on="true"] { background: var(--ink); color: #fff; }
@@ -83,9 +84,11 @@ body { -webkit-tap-highlight-color: rgba(222,30,45,.15); }
 
 /* ---- day panel ---- */
 .ca .panel { margin-top: 20px; }
-.ca .panelhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;
+.ca .panelhead { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  flex-wrap: wrap; margin-bottom: 10px;
   border-bottom: 2px solid var(--ink); padding-bottom: 7px; }
-.ca .daytitle { font-family: var(--disp); font-size: 21px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+.ca .daytitle { font-family: var(--disp); font-size: 21px; font-weight: 700; letter-spacing: .14em;
+  text-transform: uppercase; line-height: 1.1; }
 .ca .add { border: 0; background: var(--red); color: #fff; font-family: var(--disp); font-size: 15px;
   font-weight: 700; letter-spacing: .14em; text-transform: uppercase; padding: 8px 15px; border-radius: 3px; cursor: pointer; }
 .ca .add:hover { background: var(--red-dk); }
@@ -281,10 +284,16 @@ body { -webkit-tap-highlight-color: rgba(222,30,45,.15); }
 
 /* ---------------------------------------------------- endeavour trophy */
 .ca .tabs .sm { display: none; }
-@media (max-width: 560px) {
-  .ca .tab { font-size: 13.5px; letter-spacing: .08em; padding: 10px 2px; }
+@media (max-width: 700px) {
+  .ca .tab { font-size: 14px; letter-spacing: .07em; padding: 10px 2px; }
   .ca .tabs .lg { display: none; }
   .ca .tabs .sm { display: inline; }
+}
+@media (max-width: 460px) {
+  .ca .tab { font-size: 12.5px; letter-spacing: .03em; padding: 10px 1px; }
+}
+@media (max-width: 380px) {
+  .ca .tab { font-size: 11.5px; letter-spacing: 0; }
 }
 
 .ca .ttable .tname { font-size: 14px; font-weight: 600; color: var(--ink); white-space: nowrap; }
@@ -369,3 +378,46 @@ body { -webkit-tap-highlight-color: rgba(222,30,45,.15); }
 .ca .bdays textarea:focus { outline: 2px solid var(--red); outline-offset: 1px; border-color: var(--red); }
 .ca .bdaymsg { font-size: 13px; color: var(--green); margin-top: 10px; }
 .ca .bdays .field-hint { margin-top: 14px; }
+
+/* ---------------------------------------------------------------- teams */
+.ca .hint-inline { font-size: 12px; color: var(--ink-3); flex: 1 1 auto; text-align: right;
+  min-width: 0; line-height: 1.3; }
+
+.ca .band { background: var(--card); border: 1px solid var(--line); border-left: 5px solid #C4C4CA;
+  border-radius: 3px; padding: 11px 13px; margin-bottom: 10px; }
+.ca .band.over { background: #FAFAFB; border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+
+.ca .bandhead { display: flex; align-items: baseline; gap: 9px; margin-bottom: 9px; }
+.ca .bandname { font-family: var(--disp); font-size: 16px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+.ca .bandcount { font-family: var(--disp); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+
+.ca .chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 38px; align-content: flex-start; }
+.ca .bandempty { font-size: 13px; color: var(--ink-3); padding: 7px 2px; }
+
+.ca .tchip { font-family: var(--body); font-size: 15px; font-weight: 600; border-radius: 999px;
+  padding: 8px 15px; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none;
+  border: 1.5px solid var(--line); background: #F1F1F2; color: var(--ink); }
+.ca .tchip.lifting { opacity: .3; }
+.ca .ghostchip { position: fixed; z-index: 99; transform: translate(-50%, -50%) scale(1.06);
+  pointer-events: none; box-shadow: 0 6px 18px rgba(16,16,18,.28); border-radius: 999px;
+  padding: 8px 15px; font-family: var(--body); font-size: 15px; font-weight: 600;
+  background: #fff; color: var(--ink); border: 1.5px solid var(--ink); }
+
+.ca .movesheet { border-color: var(--ink); }
+.ca .movename { font-size: 15px; color: var(--ink-2); margin-bottom: 11px; }
+.ca .movename b { color: var(--ink); font-weight: 600; }
+.ca .movebtns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.ca .movebtn { padding: 12px 6px; border-radius: 3px; border: 1.5px solid var(--line); background: #fff;
+  font-family: var(--disp); font-size: 16px; font-weight: 600; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--ink-2); cursor: pointer; }
+
+.ca .tdot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex: none;
+  margin-right: 6px; background: #C4C4CA; vertical-align: baseline; }
+
+.ca .hmove { font-size: 12.5px; color: var(--ink-3); white-space: nowrap; }
+.ca .srow .sname { display: flex; align-items: center; min-width: 0; gap: 0; }
+.ca .srow .scount { font-style: normal; font-family: var(--disp); font-size: 12px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-3); margin-left: 9px; }
+.ca .addrow select { flex: none; width: auto; padding: 10px 6px; }
+.ca .squadnote { background: var(--card); border: 1px dashed var(--line); border-radius: 3px;
+  padding: 12px 14px; margin-top: 20px; font-size: 13.5px; color: var(--ink-2); }
